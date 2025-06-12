@@ -95,11 +95,6 @@ KREAN as (select *
 from mv_involvement
 where mv_involvement.involvement_name = 'Kellogg Real Estate Alumni Network'),
 
---- Kellogg Advisory Board
-
-rc as (Select *
-From v_committee_realestcouncil),
-
 
 i as (select distinct c.constituent_donor_id,
 c.industries
@@ -115,10 +110,9 @@ select distinct
        d.program_group,
        final_employment.primary_employer,
        final_employment.primary_job_title,
+       KREAN.involvement_name as KREAN_IND,
        case when Ree.UCINN_ASCENDV2__RELATED_CONTACT_DONOR_ID_FORMULA__C is not null then 'Employed in Real Estate' end as RE_Employed,
        i.industries,
-       KREAN.involvement_name as KREAN_IND,
-       case when rc.constituent_donor_id is not null then rc.involvement_name end as real_estate_advisory_council, 
        e.preferred_address_city,
        e.preferred_address_state,
        e.preferred_address_country,
@@ -152,11 +146,6 @@ left join i on i.constituent_donor_id = e.donor_id
 left join KREAN on KREAN.constituent_donor_id = e.donor_id
 --- industry in real estate
 left join Ree on Ree.UCINN_ASCENDV2__RELATED_CONTACT_DONOR_ID_FORMULA__C = e.donor_id
----- real estate advisory board
-left join rc on rc.constituent_donor_id = e.donor_id
-
-
-
 where --- Remove deceased records
 e.is_deceased_indicator = 'N'
 --- Alumni
@@ -169,10 +158,7 @@ and final_employment.UCINN_ASCENDV2__RELATED_CONTACT_DONOR_ID_FORMULA__C is not 
 and
 (Ree.UCINN_ASCENDV2__RELATED_CONTACT_DONOR_ID_FORMULA__C is not null
 
-or KREAN.constituent_donor_id is not null
-
-or rc.constituent_donor_id is not null 
-)
+or KREAN.constituent_donor_id is not null)
 
 and d.program_group IN ('FT','TMP','EMP')
 
