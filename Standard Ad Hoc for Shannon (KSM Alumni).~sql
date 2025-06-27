@@ -33,7 +33,6 @@ group by c.UCINN_ASCENDV2__RELATED_CONTACT_DONOR_ID_FORMULA__C),
 geocode as (select distinct g.ap_address_relation_record_type__c,
                         g.ap_address_relation__c,
                         g.ap_constituent__c,
-                        g.ap_geocode_value__c,
                         g.ap_geocode_value_description__c,
                         g.ap_is_active__c,
                         g.ap_is_constituent_address_relation__c,
@@ -43,10 +42,9 @@ from stg_alumni.ap_geocode__c g
 --- Active Geocode
 where g.ap_is_active__c = 'true'
 --- Louisville Geocode
-and g.ap_geocode_value_description__c like '%Nashville%'
+and g.ap_geocode_value_description__c like '%Louisville%'
 --- Club Geocode
-and (g.ap_geocode_value__c like '%aAMUz000000DkbFOAS%')
-
+and g.ap_geocode_value__c like '%aAMUz000000Dkc7OAC%'
 ),
 
 --- Join Geocode on Address
@@ -83,10 +81,6 @@ select distinct
        employ.primary_job_title,
        l.linkedin_address,
        fa.ap_geocode_value_description__c,
-       e.preferred_address_status,
-       e.preferred_address_type,
-       e.preferred_address_city,
-       e.preferred_address_state,
        sh.no_contact,
        sh.no_email_ind
 from mv_entity e
@@ -106,5 +100,6 @@ e.primary_record_type = 'Alum'
 --- Remove deceased records
 and e.is_deceased_indicator = 'N'
 ---- Take out No Contacts and No Email
-and (sh.no_contact is null) 
+and (sh.no_contact is null
+and sh.no_email_ind is null)
 order by e.sort_name asc
