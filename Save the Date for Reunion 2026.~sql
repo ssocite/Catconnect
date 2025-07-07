@@ -1,42 +1,102 @@
 --- KSM Degree and Reunion Year
 
-with d as (select c.id,
+With manual_dates As (
+Select
+  2025 AS pfy
+  ,2026 AS cfy
+  From DUAL
+),
+
+/* We will invite Full time, E&W, TMP (Part time),
+JDMBA, MMM, MBAi, Business Undergrad (old program)*/
+
+KSM_Degrees as (Select d.donor_id,
+d.program,
+d.program_group,
+d.first_ksm_year,
+d.first_masters_year,
+d.degrees_verbose,
+d.class_section
+From mv_entity_ksm_degrees d
+ WHERE D.PROGRAM IN (
+ --- All EMBA
+ 'EMP', 'EMP-FL', 'EMP-IL', 'EMP-CAN', 'EMP-GER', 'EMP-HK', 'EMP-ISR', 'EMP-JAN', 'EMP-CHI',
+--- PHDs
+'PHD',
+--- Full Time
+ 'FT', 'FT-1Y', 'FT-2Y', 'FT-JDMBA', 'FT-MMGT', 'FT-MMM',
+--- Include MSMS (AKA MiM) and MBAi
+ 'FT-MS', 'FT-MBAi',
+---- The old Undergrad programs - should be 50+ milestone Now
+ 'FT-CB', 'FT-EB',
+ --- Evening and Weekend
+ 'TMP', 'TMP-SAT','TMP-SATXCEL', 'TMP-XCEL')),
+
+--- Pull Kellogg Reunion Year
+
+d as (select c.id,
        c.ucinn_ascendv2__contact__c,
        c.ucinn_ascendv2__reunion_year__c,
        c.ap_school_reunion_year__c
 from stg_alumni.ucinn_ascendv2__degree_information__c c
 where c.ap_school_reunion_year__c like '%Kellogg%'
+and c.ap_degree_type_from_degreecode__c != 'Certificate'
 ),
 
 --- Reunion Year
+--- This is to get donor IDs that tie to the degree table
 
-reunion as (select a.ucinn_ascendv2__donor_id__c,
+reunion_year as (select a.ucinn_ascendv2__donor_id__c,
 a.firstname,
 a.lastname,
-d.ucinn_ascendv2__reunion_year__c
----d.ucinn_ascendv2__reunion_year__c
+d.ucinn_ascendv2__reunion_year__c,
+KD.program,
+KD.program_group,
+KD.first_ksm_year,
+KD.first_masters_year,
+KD.degrees_verbose,
+KD.class_section
 from stg_alumni.contact a
-inner join d on d.ucinn_ascendv2__contact__c =
-a.id),
+CROSS JOIN manual_dates MD
+inner join d on d.ucinn_ascendv2__contact__c = a.id
+inner join KSM_Degrees KD on KD.donor_id = a.ucinn_ascendv2__donor_id__c
+where (TO_NUMBER(NVL(TRIM(d.ucinn_ascendv2__reunion_year__c),'1')) IN (MD.CFY-1, MD.CFY-5, MD.CFY-10, MD.CFY-15, MD.CFY-20,
+MD.CFY-25, MD.CFY-30, MD.CFY-35, MD.CFY-40,
+MD.CFY-45, MD.CFY-50, MD.CFY-51, MD.CFY-52,
+MD.CFY-53, MD.CFY-54, MD.CFY-55, MD.CFY-56,
+MD.CFY-57, MD.CFY-58, MD.CFY-59, MD.CFY-60))),
 
 --- listag reunion
+-- Some have more than 2 preferred KSM Reunions
 
-l as (select reunion.ucinn_ascendv2__donor_id__c,
-Listagg (reunion.ucinn_ascendv2__reunion_year__c, ';  ') Within Group (Order By reunion.ucinn_ascendv2__reunion_year__c)
+l as (select reunion_year.ucinn_ascendv2__donor_id__c,
+Listagg (distinct reunion_year.ucinn_ascendv2__reunion_year__c, ';  ') Within Group (Order By reunion_year.ucinn_ascendv2__reunion_year__c)
 As reunion_year_concat
-from reunion
-group by reunion.ucinn_ascendv2__donor_id__c
+from reunion_year
+group by reunion_year.ucinn_ascendv2__donor_id__c
 ),
 
---- Just Full Time, EMBA and Evening and Weekend
+--- Final Reunion Subquery
 
-k as (Select d.donor_id,
-d.program,
-d.program_group,
-d.first_ksm_year
-From mv_entity_ksm_degrees d
-where d.program_GROUP IN ('FT','EMP','TMP')
+k as (select l.ucinn_ascendv2__donor_id__c,
+l.reunion_year_concat,
+reunion_year.first_ksm_year,
+reunion_year.program,
+reunion_year.program_group,
+reunion_year.class_section,
+reunion_year.first_masters_year,
+reunion_year.degrees_verbose
+from l
+inner join KSM_Degrees on KSM_Degrees.donor_id = l.ucinn_ascendv2__donor_id__c
+inner join reunion_year on reunion_year.ucinn_ascendv2__donor_id__c = l.ucinn_ascendv2__donor_id__c),
 
+--- Current Linkedin Addresses
+a as (select
+stg_alumni.ucinn_ascendv2__social_media__c.ucinn_ascendv2__contact__c,
+max (stg_alumni.ucinn_ascendv2__social_media__c.ucinn_ascendv2__url__c) keep (dense_rank first order by stg_alumni.ucinn_ascendv2__social_media__c.lastmodifieddate) as Linkedin_address
+from stg_alumni.ucinn_ascendv2__social_media__c
+where stg_alumni.ucinn_ascendv2__social_media__c.ap_status__c like '%Current%'
+group BY stg_alumni.ucinn_ascendv2__social_media__c.ucinn_ascendv2__contact__c
 ),
 
 -- GAB
@@ -48,6 +108,12 @@ From v_committee_gab),
 
 kac as (select *
 from v_committee_kac),
+
+--- PHS
+
+phs as (select *
+from v_committee_phs),
+
 
 --- Trustee
 
@@ -66,13 +132,15 @@ entity.preferred_address_status,
 entity.preferred_address_type,
 entity.preferred_address_line_1,
 entity.preferred_address_line_2,
+entity.preferred_address_line_3,
 entity.preferred_address_city,
 entity.preferred_address_state,
 entity.preferred_address_postal_code,
 entity.preferred_address_country
 from mv_entity entity
 inner join l on l.ucinn_ascendv2__donor_id__c = entity.donor_id
-inner join k on k.donor_id = entity.donor_id
+--- Pulling JUST on the Programs for Reunion
+inner join k on k.ucinn_ascendv2__donor_id__c = entity.donor_id
 where
 --- don't want 2025, but do want 1's and 6's
 (l.reunion_year_concat like '%2021%'
@@ -117,6 +185,7 @@ inner join a on c.id = a.ucinn_ascendv2__contact__c),
 
 SH as (select  s.donor_id,
        s.no_contact,
+       s.no_phone_ind,
        s.no_mail_ind,
        s.no_email_ind,
        s.never_engaged_forever,
@@ -135,41 +204,58 @@ phone as (select c.ucinn_ascendv2__donor_id__c,
 c.phone
 from stg_alumni.contact c),
 
---- Salutation 
+--- Salutation
 
 salutation as (
 select co.ucinn_ascendv2__donor_id__c,
 co.salutation
-from stg_alumni.contact co)
+from stg_alumni.contact co),
+
+
+--- 2016 Reunion Attendees
+
+r16 as (SELECT r16.id_number
+FROM ksm_2016_reunion r16),
+
+--- 2022 Reunion Attendees
+
+r22 as (SELECT r22.id_number
+FROM ksm_2022_weekend1_reunion r22)
 
 --- Query
 
-select FR.donor_id,
+select distinct FR.donor_id,
 en.household_primary,
---- Salutation 
+en.is_deceased_indicator,
+--- Salutation
 salutation.salutation,
 FR.first_name,
 FR.last_name,
 FR.institutional_suffix,
 FR.reunion_year_concat as reunion_year_concat,
 k.first_ksm_year,
-case when FR.reunion_year_concat = '2021' then '5th Milestone'
-  when FR.reunion_year_concat = '2016' then '10th Milestone'
-  when FR.reunion_year_concat = '2011' then '15th Milestone'
-  when FR.reunion_year_concat = '2006' then '20th Milestone'
-  when FR.reunion_year_concat = '2001' then '25th Milestone'
-  when FR.reunion_year_concat = '1996' then '25th Milestone'
-  when FR.reunion_year_concat = '1991' then '30th Milestone'
-  when FR.reunion_year_concat = '1986' then '35th Milestone'
-  when FR.reunion_year_concat = '1981' then '40th Milestone'
-  when FR.reunion_year_concat = '1976' then '45th Milestone'
-  when FR.reunion_year_concat = '1971' then '50th Milestone'
-    end as reunion_milestone,
+case when FR.reunion_year_concat like '%2021%' then 'Share if you plan to attend your 5th Reunion!'
+when FR.reunion_year_concat like '%2016%' then 'Share if you plan to attend your 10th Reunion!'
+when FR.reunion_year_concat like '%2011%' then 'Share if you plan to attend your 15th Reunion!'
+when FR.reunion_year_concat like '%2006%' then 'Share if you plan to attend your 20th Reunion!'
+when FR.reunion_year_concat like '%2001%' then 'Share if you plan to attend your 25th Reunion!'
+when FR.reunion_year_concat like '%1996%' then 'Share if you plan to attend your 30th Reunion!'
+when FR.reunion_year_concat like '%1991%' then 'Share if you plan to attend your 35th Reunion!'
+when FR.reunion_year_concat like '%1986%' then 'Share if you plan to attend your 40th Reunion!'
+when FR.reunion_year_concat like '%1981%' then 'Share if you plan to attend your 45th Reunion!'
+when FR.reunion_year_concat like '%1976%' then 'Share if you plan to attend your 50th Reunion!'
+end as reunion_milestone_celebrating,
+-- Past Reunion Flags
+case when r16.id_number is not null then 'Reunion 2016 Attendee' end as Reunion_16_Attendee,
+case when r22.id_number is not null then 'Reunion 2022 Attendee' end as Reunion_22_Attendee,
 k.program,
 k.program_group,
 employ.primary_employer,
 employ.primary_job_title,
 
+--- Contact Information
+
+--- Use Special handling of No Contact/No email or phone to mask anyone with those flags
 case when sh.no_contact is null
 and       sh.no_mail_ind is null then FR.preferred_address_status end as preferred_address_status,
 case when sh.no_contact is null
@@ -179,6 +265,8 @@ and       sh.no_mail_ind is null then FR.preferred_address_line_1 end as preferr
 case when sh.no_contact is null
 and       sh.no_mail_ind is null then FR.preferred_address_line_2 end as preferred_address_line2,
 case when sh.no_contact is null
+and       sh.no_mail_ind is null then FR.preferred_address_line_3 end as preferred_address_line3,
+case when sh.no_contact is null
 and       sh.no_mail_ind is null then FR.preferred_address_city end as preferred_address_city,
 case when sh.no_contact is null
 and       sh.no_mail_ind is null then FR.preferred_address_state end as preferred_address_state,
@@ -186,10 +274,14 @@ case when sh.no_contact is null
 and       sh.no_mail_ind is null then FR.preferred_address_postal_code end as preferred_postal_code,
 case when sh.no_contact is null
 and       sh.no_mail_ind is null then FR.preferred_address_country end as preferred_country,
+--- Email Address
 case when sh.no_contact is null
 and sh.no_email_ind is null
-then email.email end as email_address,
-phone.phone,
+then email.email end as preferred_email_address,
+--- Phone
+case when sh.no_phone_ind is null and  sh.no_contact is null then
+phone.phone end as preferred_phone,
+--- Special Handling Flags
 sh.no_contact,
 sh.no_mail_ind,
 sh.no_email_ind
@@ -197,8 +289,8 @@ from FR
 --- entity
 inner join mv_entity en on en.donor_id = fr.donor_id
 --- degrees
-inner join k on k.donor_id = FR.donor_id
---- Salutation 
+inner join k on k.ucinn_ascendv2__donor_id__c = FR.donor_id
+--- Salutation
 inner join salutation on salutation.ucinn_ascendv2__donor_id__c = FR.donor_id
 --- employment
 left join employ on employ.UCINN_ASCENDV2__RELATED_CONTACT_DONOR_ID_FORMULA__C = FR.donor_id
@@ -216,15 +308,34 @@ left join kac on kac.constituent_donor_id = fr.donor_id
 left join gab on gab.constituent_donor_id = fr.donor_id
 --- trustee
 left join trustee on trustee.constituent_donor_id = fr.donor_id
-where (kac.constituent_donor_id is null
+--- PHS
+left join phs on phs.constituent_donor_id = fr.donor_id
+--- 2016 Reunion
+left join r16 on r16.id_number = fr.donor_id
+--- 2022 Reunion
+left join r22 on r22.id_number = fr.donor_id
+where
+--- Primary Household!
+en.household_primary = 'Y'
+
+--- Alumni are living
+
+and en.is_deceased_indicator = 'N'
+
+--- exclude kac, gab, trustees, phs
+
+and (kac.constituent_donor_id is null
 and gab.constituent_donor_id is null
-and trustee.constituent_donor_id is null)
---- exclude no contact, never engaged forever, never engaged reunion, no mail
+and trustee.constituent_donor_id is null
+and phs.constituent_donor_id is null)
+
+--- AND exclude no contact, never engaged forever, never engaged reunion, no mail
 and  (sh.no_contact is null
 and  sh.never_engaged_forever is null
 and sh.never_engaged_reunion is null
 and sh.no_mail_ind is null)
---- Primary Household!
-and en.household_primary = 'Y'
-and FR.reunion_year_concat is not null
-order by reunion_year_concat ASC 
+
+--- No Faculty or Staff
+and FR.institutional_suffix not like '%Faculty/Staff%'
+
+order by reunion_year_concat ASC

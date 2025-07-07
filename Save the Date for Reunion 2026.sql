@@ -226,14 +226,14 @@ FROM ksm_2022_weekend1_reunion r22)
 
 select distinct FR.donor_id,
 en.household_primary,
-en.is_deceased_indicator,
+---en.is_deceased_indicator,
 --- Salutation
 salutation.salutation,
 FR.first_name,
 FR.last_name,
 FR.institutional_suffix,
 FR.reunion_year_concat as reunion_year_concat,
-k.first_ksm_year,
+k.first_masters_year,
 case when FR.reunion_year_concat like '%2021%' then 'Share if you plan to attend your 5th Reunion!'
 when FR.reunion_year_concat like '%2016%' then 'Share if you plan to attend your 10th Reunion!'
 when FR.reunion_year_concat like '%2011%' then 'Share if you plan to attend your 15th Reunion!'
