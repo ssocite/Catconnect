@@ -14,6 +14,7 @@ d.program,
 d.program_group,
 d.first_ksm_year,
 d.first_masters_year,
+d.last_masters_year,
 d.degrees_verbose,
 d.last_noncert_year,
 d.class_section
@@ -41,6 +42,7 @@ KD.program,
 KD.program_group,
 KD.first_ksm_year,
 KD.first_masters_year,
+KD.last_masters_year,
 KD.degrees_verbose,
 KD.last_noncert_year,
 KD.class_section
@@ -95,6 +97,7 @@ reunion_year.program,
 reunion_year.program_group,
 reunion_year.class_section,
 reunion_year.first_masters_year,
+reunion_year.last_masters_year,
 reunion_year.last_noncert_year,
 reunion_year.degrees_verbose
 from l
@@ -233,6 +236,7 @@ FR.last_name,
 FR.institutional_suffix,
 FR.reunion_year_concat as reunion_year_concat,
 k.first_masters_year,
+k.last_masters_year,
 k.last_noncert_year,
 case when FR.reunion_year_concat like '%2021%' then 'Share if you plan to attend your 5th Reunion!'
 when FR.reunion_year_concat like '%2016%' then 'Share if you plan to attend your 10th Reunion!'

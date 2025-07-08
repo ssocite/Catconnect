@@ -1,5 +1,3 @@
---- KSM Degree and Reunion Year
-
 With manual_dates As (
 Select
   2025 AS pfy
@@ -20,7 +18,7 @@ d.last_noncert_year,
 d.class_section
 From mv_entity_ksm_degrees d),
 
---- Pull Kellogg Reunion Year
+--- Pull Kellogg Reunion Year - Exclude Certificates
 
 d as (select c.id,
        c.ucinn_ascendv2__contact__c,
@@ -50,21 +48,20 @@ from stg_alumni.contact a
 CROSS JOIN manual_dates MD
 inner join d on d.ucinn_ascendv2__contact__c = a.id
 inner join KSM_Degrees KD on KD.donor_id = a.ucinn_ascendv2__donor_id__c
-where (TO_NUMBER(NVL(TRIM(d.ucinn_ascendv2__reunion_year__c),'1'))) IN (
---- I don't want 2025: MD.CFY-1
 
---- Just 5th - 50th 
+--- Years adjusted to first query
+--- This project just wants 5th - 50th Milestones 
+
+where (TO_NUMBER(NVL(TRIM(d.ucinn_ascendv2__reunion_year__c),'1'))) IN (--- Just 5th - 50th 
 MD.CFY-5, MD.CFY-10, MD.CFY-15, MD.CFY-20,
 MD.CFY-25, MD.CFY-30, MD.CFY-35, MD.CFY-40,
-MD.CFY-45, MD.CFY-50
---- I don't want over 50
---- MD.CFY-51, MD.CFY-52, MD.CFY-53, MD.CFY-54, MD.CFY-55, MD.CFY-56,MD.CFY-57, MD.CFY-58, MD.CFY-59, MD.CFY-60
-)
+MD.CFY-45, MD.CFY-50)
 
 /* We will invite Full time, E&W, TMP (Part time),PHDs
 JDMBA, MMM, MBAi, Business Undergrad (old program)*/
 
-AND KD.PROGRAM IN (--- All EMBA
+AND KD.PROGRAM IN (
+--- All EMBA
  'EMP', 'EMP-FL', 'EMP-IL', 'EMP-CAN', 'EMP-GER', 'EMP-HK', 'EMP-ISR', 'EMP-JAN', 'EMP-CHI',
 --- PHDs
 'PHD',
@@ -82,8 +79,7 @@ AND KD.PROGRAM IN (--- All EMBA
 
 l as (select reunion_year.ucinn_ascendv2__donor_id__c,
 Listagg (distinct reunion_year.ucinn_ascendv2__reunion_year__c, ';  ') 
-Within Group (Order By reunion_year.ucinn_ascendv2__reunion_year__c)
-As reunion_year_concat
+Within Group (Order By reunion_year.ucinn_ascendv2__reunion_year__c) As reunion_year_concat
 from reunion_year
 group by reunion_year.ucinn_ascendv2__donor_id__c
 ),
@@ -104,15 +100,6 @@ from l
 inner join KSM_Degrees on KSM_Degrees.donor_id = l.ucinn_ascendv2__donor_id__c
 inner join reunion_year on reunion_year.ucinn_ascendv2__donor_id__c = l.ucinn_ascendv2__donor_id__c),
 
---- Current Linkedin Addresses
-a as (select
-stg_alumni.ucinn_ascendv2__social_media__c.ucinn_ascendv2__contact__c,
-max (stg_alumni.ucinn_ascendv2__social_media__c.ucinn_ascendv2__url__c) keep (dense_rank first order by stg_alumni.ucinn_ascendv2__social_media__c.lastmodifieddate) as Linkedin_address
-from stg_alumni.ucinn_ascendv2__social_media__c
-where stg_alumni.ucinn_ascendv2__social_media__c.ap_status__c like '%Current%'
-group BY stg_alumni.ucinn_ascendv2__social_media__c.ucinn_ascendv2__contact__c
-),
-
 -- GAB
 
 GAB as (Select *
@@ -127,7 +114,6 @@ from v_committee_kac),
 
 phs as (select *
 from v_committee_phs),
-
 
 --- Trustee
 
@@ -155,6 +141,7 @@ from mv_entity entity
 inner join l on l.ucinn_ascendv2__donor_id__c = entity.donor_id
 --- Pulling JUST on the Programs for Reunion
 inner join k on k.ucinn_ascendv2__donor_id__c = entity.donor_id
+--- Projects just wants domestic alumni 
 where entity.preferred_address_country like '%United States%'),
 
 --- employment
@@ -224,11 +211,8 @@ FROM ksm_2016_reunion r16),
 r22 as (SELECT r22.id_number
 FROM ksm_2022_weekend1_reunion r22)
 
---- Query
-
 select distinct FR.donor_id,
 en.household_primary,
----en.is_deceased_indicator,
 --- Salutation
 salutation.salutation,
 FR.first_name,
@@ -238,6 +222,8 @@ FR.reunion_year_concat as reunion_year_concat,
 k.first_masters_year,
 k.last_masters_year,
 k.last_noncert_year,
+--- There are a very small handful of folks with 2 Reunions
+--- I ordered this by most recent. Assuming their most recent is their highest level of education 
 case when FR.reunion_year_concat like '%2021%' then 'Share if you plan to attend your 5th Reunion!'
 when FR.reunion_year_concat like '%2016%' then 'Share if you plan to attend your 10th Reunion!'
 when FR.reunion_year_concat like '%2011%' then 'Share if you plan to attend your 15th Reunion!'
@@ -279,8 +265,7 @@ and       sh.no_mail_ind is null then FR.preferred_address_postal_code end as pr
 case when sh.no_contact is null
 and       sh.no_mail_ind is null then FR.preferred_address_country end as preferred_country,
 --- Email Address
-case when sh.no_contact is null
-and sh.no_email_ind is null
+case when sh.no_contact is null and sh.no_email_ind is null
 then email.email end as preferred_email_address,
 --- Phone
 case when sh.no_phone_ind is null and  sh.no_contact is null then
@@ -314,9 +299,9 @@ left join gab on gab.constituent_donor_id = fr.donor_id
 left join trustee on trustee.constituent_donor_id = fr.donor_id
 --- PHS
 left join phs on phs.constituent_donor_id = fr.donor_id
---- 2016 Reunion
+--- 2016 Reunion Attendees
 left join r16 on r16.id_number = fr.donor_id
---- 2022 Reunion
+--- 2022 Reunion Attendees
 left join r22 on r22.id_number = fr.donor_id
 where
 --- Primary Household!
