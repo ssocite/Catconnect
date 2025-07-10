@@ -16,10 +16,9 @@ d.last_masters_year,
 d.degrees_verbose,
 d.last_noncert_year,
 d.class_section
-From mv_entity_ksm_degrees d
-),
+From mv_entity_ksm_degrees d),
 
---- Pull Kellogg Reunion Year - Exclude Certificates AND Doctorates 
+--- Pull Kellogg Reunion Year - Exclude Certificates
 
 d as (select c.id,
        c.ucinn_ascendv2__contact__c,
@@ -27,7 +26,7 @@ d as (select c.id,
        c.ap_school_reunion_year__c
 from stg_alumni.ucinn_ascendv2__degree_information__c c
 where c.ap_school_reunion_year__c like '%Kellogg%'
-and c.ap_degree_type_from_degreecode__c Not In ('Certificate', 'Doctorate Degree')
+and c.ap_degree_type_from_degreecode__c != 'Certificate'
 ),
 
 --- Reunion Year
@@ -51,9 +50,9 @@ inner join d on d.ucinn_ascendv2__contact__c = a.id
 inner join KSM_Degrees KD on KD.donor_id = a.ucinn_ascendv2__donor_id__c
 
 --- Years adjusted to first query
---- This project just wants 5th - 50th Milestones
+--- This project just wants 5th - 50th Milestones 
 
-where (TO_NUMBER(NVL(TRIM(d.ucinn_ascendv2__reunion_year__c),'1'))) IN (--- Just 5th - 50th
+where (TO_NUMBER(NVL(TRIM(d.ucinn_ascendv2__reunion_year__c),'1'))) IN (--- Just 5th - 50th 
 MD.CFY-5, MD.CFY-10, MD.CFY-15, MD.CFY-20,
 MD.CFY-25, MD.CFY-30, MD.CFY-35, MD.CFY-40,
 MD.CFY-45, MD.CFY-50)
@@ -64,7 +63,8 @@ JDMBA, MMM, MBAi, Business Undergrad (old program)*/
 AND KD.PROGRAM IN (
 --- All EMBA
  'EMP', 'EMP-FL', 'EMP-IL', 'EMP-CAN', 'EMP-GER', 'EMP-HK', 'EMP-ISR', 'EMP-JAN', 'EMP-CHI',
---- No PHDs for the Save the Date Project
+--- PHDs
+'PHD',
 --- Full Time
  'FT', 'FT-1Y', 'FT-2Y', 'FT-JDMBA', 'FT-MMGT', 'FT-MMM',
 --- Include MSMS (AKA MiM) and MBAi
@@ -78,7 +78,7 @@ AND KD.PROGRAM IN (
 -- Some have more than 2 preferred KSM Reunions
 
 l as (select reunion_year.ucinn_ascendv2__donor_id__c,
-Listagg (distinct reunion_year.ucinn_ascendv2__reunion_year__c, ';  ')
+Listagg (distinct reunion_year.ucinn_ascendv2__reunion_year__c, ';  ') 
 Within Group (Order By reunion_year.ucinn_ascendv2__reunion_year__c) As reunion_year_concat
 from reunion_year
 group by reunion_year.ucinn_ascendv2__donor_id__c
@@ -141,18 +141,13 @@ from mv_entity entity
 inner join l on l.ucinn_ascendv2__donor_id__c = entity.donor_id
 --- Pulling JUST on the Programs for Reunion
 inner join k on k.ucinn_ascendv2__donor_id__c = entity.donor_id
---- Projects just wants domestic alumni
-where entity.preferred_address_country like '%United States%'
-or entity.preferred_address_country In ('USA', 'UNITED STATES', 'US')
-
-),
+--- Projects just wants domestic alumni 
+where entity.preferred_address_country like '%United States%'),
 
 --- employment
 employ as (select distinct
 c.UCINN_ASCENDV2__RELATED_CONTACT_DONOR_ID_FORMULA__C,
 max (c.ap_is_primary_employment__c) keep (dense_rank First Order by c.ucinn_ascendv2__start_date__c desc) as primary_employ_ind,
-max (c.ucinn_ascendv2__is_retiree__c) keep (dense_rank First Order by c.ucinn_ascendv2__start_date__c desc) as retiree,
-max (c.ucinn_ascendv2__status__c) keep (dense_rank First Order by c.ucinn_ascendv2__start_date__c desc) as job_status,
 max (c.ucinn_ascendv2__job_title__c) keep (dense_rank first order by c.ucinn_ascendv2__start_date__c desc) as primary_job_title,
 max (c.UCINN_ASCENDV2__RELATED_ACCOUNT_NAME_FORMULA__C) keep (dense_rank first order by c.ucinn_ascendv2__start_date__c desc) as primary_employer
 from stg_alumni.ucinn_ascendv2__Affiliation__c c
@@ -226,11 +221,10 @@ FR.institutional_suffix,
 FR.reunion_year_concat as reunion_year_concat,
 k.first_masters_year,
 k.last_masters_year,
----k.last_noncert_year,
+k.last_noncert_year,
 --- There are a very small handful of folks with 2 Reunions
---- I ordered this by most recent. Assuming their most recent is their highest level of education
-case
-when FR.reunion_year_concat like '%2021%' then 'Share if you plan to attend your 5th Reunion!'
+--- I ordered this by most recent. Assuming their most recent is their highest level of education 
+case when FR.reunion_year_concat like '%2021%' then 'Share if you plan to attend your 5th Reunion!'
 when FR.reunion_year_concat like '%2016%' then 'Share if you plan to attend your 10th Reunion!'
 when FR.reunion_year_concat like '%2011%' then 'Share if you plan to attend your 15th Reunion!'
 when FR.reunion_year_concat like '%2006%' then 'Share if you plan to attend your 20th Reunion!'
@@ -246,11 +240,6 @@ case when r16.id_number is not null then 'Reunion 2016 Attendee' end as Reunion_
 case when r22.id_number is not null then 'Reunion 2022 Attendee' end as Reunion_22_Attendee,
 k.program,
 k.program_group,
-employ.job_status,
-case when employ.primary_employer like '%Retired%'
-  or employ.primary_job_title like '%Retired%'
-  or employ.retiree like '%True%'
-  then 'Retired' end as retired,
 employ.primary_employer,
 employ.primary_job_title,
 
@@ -291,7 +280,7 @@ inner join mv_entity en on en.donor_id = fr.donor_id
 --- degrees
 inner join k on k.ucinn_ascendv2__donor_id__c = FR.donor_id
 --- Salutation
-left join salutation on salutation.ucinn_ascendv2__donor_id__c = FR.donor_id
+inner join salutation on salutation.ucinn_ascendv2__donor_id__c = FR.donor_id
 --- employment
 left join employ on employ.UCINN_ASCENDV2__RELATED_CONTACT_DONOR_ID_FORMULA__C = FR.donor_id
 --- linkedin
