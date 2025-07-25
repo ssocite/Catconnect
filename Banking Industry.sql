@@ -134,5 +134,5 @@ e.is_deceased_indicator = 'N'
 ---- Take out No Contacts
 and (sh.no_contact is null)
 --- FT, EMBA, E&W
-and d.program IN ('TMP','EMP','FT')
+and d.program_group IN ('TMP','EMP','FT')
 order by bank.primary_job_title asc
